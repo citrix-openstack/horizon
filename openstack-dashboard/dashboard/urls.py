@@ -39,8 +39,12 @@ urlpatterns = patterns('',
         name='syspanel_overview'),
 )
 
-# Development static app and project media serving using the staticfiles app.
-urlpatterns += staticfiles_urlpatterns()
+#urlpatterns += staticfiles_urlpatterns()
+urlpatterns += patterns('',
+        url(r'^static/(?P<path>.*)$', 'django.views.static.serve', {
+            'document_root': settings.STATICFILES_DIRS[0],
+        }),
+   )
 
 # Convenience function for serving user-uploaded media during
 # development. Only active if DEBUG==True and the URL prefix is a local
