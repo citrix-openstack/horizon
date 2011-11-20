@@ -100,7 +100,7 @@ def create(request, tenant_id, instance_id):
     try:
         instance = api.server_get(request, instance_id)
     except api_exceptions.ApiException, e:
-        msg = "Unable to retreive instance: %s" % str(e)
+        msg = "Unable to retrieve instance: %s" % str(e)
         LOG.exception(msg)
         messages.error(request, msg)
         return shortcuts.redirect('dash_instances', tenant_id)

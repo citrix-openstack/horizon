@@ -56,7 +56,7 @@ class UpdateImageForm(forms.SelfHandlingForm):
     def handle(self, request, data):
         image_id = data['image_id']
         tenant_id = request.user.tenant_id
-        error_retrieving = _('Unable to retreive image info from glance: %s' % image_id)
+        error_retrieving = _('Unable to retrieve image info from glance: %s' % image_id)
         error_updating = _('Error updating image with id: %s' % image_id)
 
         try:
@@ -228,7 +228,7 @@ def index(request, tenant_id):
         LOG.exception("Error retrieving image list")
         messages.error(request, "Error retrieving image list: %s" % str(e))
     except api_exceptions.ApiException, e:
-        msg = "Unable to retreive image info from glance: %s" % str(e)
+        msg = "Unable to retrieve image info from glance: %s" % str(e)
         LOG.exception(msg)
         messages.error(request, msg)
 
