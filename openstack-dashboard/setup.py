@@ -35,6 +35,11 @@ setuptools.setup(
     long_description = read('README'),
     author = 'Devin Carlen',
     author_email = 'devin.carlen@gmail.com',
+    packages = setuptools.find_packages(),
+    package_data = {'dashboard':
+                    [s[len('dashboard/'):] for s in
+                     setuptools.findall('dashboard/static') +
+                     setuptools.findall('dashboard/templates')]},
     data_files = [],
     install_requires = ['setuptools', 'mox>=0.5.0'],
     zip_safe = False,
