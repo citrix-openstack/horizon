@@ -48,7 +48,8 @@ import openstackx.api.exceptions as api_exceptions
 import openstackx.extras
 import openstackx.auth
 from novaclient.v1_1 import client
-import quantum.client
+if settings.QUANTUM_ENABLED:
+    import quantum.client
 from urlparse import urlparse
 
 LOG = logging.getLogger('django_openstack.api')
