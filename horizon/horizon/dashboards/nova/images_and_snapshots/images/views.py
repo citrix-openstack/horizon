@@ -115,6 +115,8 @@ def launch(request, image_id):
     try:
         quotas.ram = int(quotas.ram)
     except Exception, e:
+        if not hasattr(e, 'message'):
+            e.message = str(e)
         messages.error(request,
                 _('Error parsing quota  for %(image)s: %(msg)s') %
                 {"image": image_id, "msg": e.message})
@@ -163,5 +165,6 @@ def update(request, image_id):
         return handled
 
     context = {'form': form, "image": image}
+    template = 'nova/images_and_snapshots/images/update.html'
 
-    return shortcuts.render(request, 'nova/images_and_snapshots/images/update.html', context)
+    return shortcuts.render(request, template, context)

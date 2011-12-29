@@ -6,7 +6,7 @@ set -o errexit
 # Increment me any time the environment should be rebuilt.
 # This includes dependncy changes, directory renames, etc.
 # Simple integer secuence: 1, 2, 3...
-environment_version=5
+environment_version=6
 #--------------------------------------------------------#
 
 function usage {
@@ -25,7 +25,7 @@ function usage {
   echo "  -t, --tabs               Check for tab characters in files."
   echo "  -y, --pylint             Just run pylint"
   echo "  -q, --quiet              Run non-interactively. (Relatively) quiet."
-  echo "                           Synonymous with -V currently."
+  echo "                           Implies -V if -N is not set."
   echo "  --with-selenium          Run unit tests including Selenium tests"
   echo "  --runserver              Run the Django development server for"
   echo "                           openstack-dashboard in the virtual"
@@ -92,7 +92,7 @@ function process_option {
 
 function run_server {
   echo "Starting Django development server..."
-  ${django_wrapper} python openstack-dashboard/dashboard/manage.py runserver
+  ${django_wrapper} python openstack-dashboard/dashboard/manage.py runserver $testargs
   echo "Server stopped."
 }
 
@@ -119,7 +119,7 @@ function run_pep8 {
   PEP8_OPTIONS="--exclude=$PEP8_EXCLUDE --repeat"
   PEP8_INCLUDE="openstack-dashboard/dashboard horizon/horizon"
   echo "${django_wrapper} pep8 $PEP8_OPTIONS $PEP8_INCLUDE > pep8.txt"
-  ${django_wrapper} pep8 $PEP8_OPTIONS $PEP8_INCLUDE > pep8.txt || true
+  ${django_wrapper} pep8 $PEP8_OPTIONS $PEP8_INCLUDE | perl -ple 's/: ([WE]\d+)/: [$1]/' > pep8.txt || true
   PEP8_COUNT=`wc -l pep8.txt | awk '{ print $1 }'`
   if [ $PEP8_COUNT -ge 1 ]; then
     echo "PEP8 violations found ($PEP8_COUNT):"
@@ -190,7 +190,7 @@ function environment_check {
     fi
   fi
 
-  if [ $quiet -eq 1 ] || [ $always_venv -eq 1 ]; then
+  if [ $always_venv -eq 1 ]; then
     destroy_buildout
     install_venv
   else
@@ -282,8 +282,17 @@ function install_venv {
   # Install openstack-dashboard with install_venv.py
   export PIP_DOWNLOAD_CACHE=/tmp/.pip_download_cache
   export PIP_USE_MIRRORS=true
+  if [ $quiet -eq 1 ]; then
+    export PIP_NO_INPUT=true
+  fi
   cd openstack-dashboard
-  python tools/install_venv.py
+  INSTALL_FAILED=0
+  python tools/install_venv.py || INSTALL_FAILED=1
+  if [ $INSTALL_FAILED -eq 1 ]; then
+    echo "Error updating environment with pip, trying without src packages..."
+    rm -rf .dashboard-venv/src
+    python tools/install_venv.py
+  fi
   cd ..
   # Install horizon with buildout
   if [ ! -d /tmp/.buildout_cache ]; then
@@ -363,6 +372,7 @@ function run_tests {
     cp local/local_settings.py.bak local/local_settings.py
     rm local/local_settings.py.bak
   fi
+  rm local/local_settings.pyc
   cd ..
 
   if [ $with_coverage -eq 1 ]; then
@@ -389,6 +399,11 @@ function run_tests {
 for arg in "$@"; do
     process_option $arg
 done
+
+if [ $quiet -eq 1 ] && [ $never_venv -eq 0 ] && [ $always_venv -eq 0 ]
+then
+  always_venv=1
+fi
 
 # If destroy is set, just blow it away and exit.
 if [ $destroy -eq 1 ]; then

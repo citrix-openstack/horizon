@@ -1,9 +1,5 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 
-# Copyright 2011 United States Government as represented by the
-# Administrator of the National Aeronautics and Space Administration.
-# All Rights Reserved.
-#
 # Copyright 2011 Nebula, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -18,12 +14,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from django.conf.urls.defaults import patterns, url
+from django import shortcuts
+from django.contrib.auth.decorators import login_required
+from horizon.dashboards.settings.tenant.forms import DownloadOpenRCForm
 
 
-VIEWS_MOD = 'horizon.dashboards.nova.images_and_snapshots.snapshots.views'
-
-
-urlpatterns = patterns(VIEWS_MOD,
-    url(r'^$', 'index', name='index'),
-    url(r'^(?P<instance_id>[^/]+)/create', 'create', name='create'))
+@login_required
+def index(request):
+    return shortcuts.render(request, 'settings/user/settings.html', {})

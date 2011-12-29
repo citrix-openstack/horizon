@@ -41,7 +41,7 @@ LOG = logging.getLogger(__name__)
 
 class GlobalSummary(object):
     node_resources = ['vcpus', 'disk_size', 'ram_size']
-    unit_mem_size = {'disk_size': ['GiB', 'TiB'], 'ram_size': ['MiB', 'GiB']}
+    unit_mem_size = {'disk_size': ['GB', 'TB'], 'ram_size': ['MB', 'GB']}
     node_resource_info = ['', 'active_', 'avail_']
 
     def __init__(self, request):
@@ -263,6 +263,8 @@ def index(request):
         instances = api.admin_server_list(request)
     except Exception as e:
         LOG.exception('Unspecified error in instance index')
+        if not hasattr(e, 'message'):
+            e.message = str(e)
         messages.error(request,
                        _('Unable to get instance list: %s') % e.message)
 
@@ -289,6 +291,8 @@ def refresh(request):
     try:
         instances = api.admin_server_list(request)
     except Exception as e:
+        if not hasattr(e, 'message'):
+            e.message = str(e)
         messages.error(request,
                        _('Unable to get instance list: %s') % e.message)
 
