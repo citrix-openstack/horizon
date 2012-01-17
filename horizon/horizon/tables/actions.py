@@ -17,8 +17,13 @@
 import logging
 import new
 
+from django import shortcuts
 from django.forms.util import flatatt
+from django.contrib import messages
 from django.core import urlresolvers
+from django.utils.translation import string_concat
+
+from horizon import exceptions
 
 
 LOG = logging.getLogger(__name__)
@@ -30,6 +35,7 @@ class BaseAction(object):
     handles_multiple = False
     attrs = {}
     name = None
+    requires_input = False
 
     def allowed(self, request, datum):
         """ Determine whether this action is allowed for the current request.
@@ -84,6 +90,11 @@ class Action(BaseAction):
         The HTTP method for this action. Defaults to ``POST``. Other methods
         may or may not succeed currently.
 
+    .. attribute:: requires_input
+
+        Boolean value indicating whether or not this action can be taken
+        without any additional input (e.g. an object id). Defaults to ``True``.
+
     At least one of the following methods must be defined:
 
     .. method:: single(self, data_table, request, object_id)
@@ -94,7 +105,6 @@ class Action(BaseAction):
 
         Handler for multi-object actions.
 
-
     .. method:: handle(self, data_table, request, object_ids)
 
         If a single function can work for both single-object and
@@ -104,10 +114,11 @@ class Action(BaseAction):
         into a list containing only the single object id.
     """
     method = "POST"
+    requires_input = True
 
     def __init__(self, verbose_name=None, verbose_name_plural=None,
                  single_func=None, multiple_func=None, handle_func=None,
-                 handles_multiple=False, attrs=None):
+                 handles_multiple=False, attrs=None, requires_input=True):
         super(Action, self).__init__()
         self.name = unicode(getattr(self, 'name', self.__class__.__name__))
         verbose_name = verbose_name or self.name.title()
@@ -121,6 +132,9 @@ class Action(BaseAction):
         self.handles_multiple = getattr(self,
                                         "handles_multiple",
                                         handles_multiple)
+        self.requires_input = getattr(self,
+                                      "requires_input",
+                                      requires_input)
         if attrs:
             self.attrs.update(attrs)
 
@@ -141,8 +155,10 @@ class Action(BaseAction):
             self.handles_multiple = True
 
         if not has_handler and (not has_single or has_multiple):
-            raise ValueError('You must define either a "handle" method '
-                             ' or a "single" or "multiple" method.')
+            raise NotImplementedError('You must define either a "handle" '
+                                      'method or a "single" or "multiple"'
+                                      ' method.')
+
         if not has_single:
             def single(self, data_table, request, object_id):
                 return self.handle(data_table, request, [object_id])
@@ -188,15 +204,15 @@ class LinkAction(BaseAction):
                                             verbose_name))
         self.url = getattr(self, "url", url)
         if not self.verbose_name:
-            raise ValueError('A LinkAction object must have a '
-                             'verbose_name attribute.')
+            raise NotImplementedError('A LinkAction object must have a '
+                                      'verbose_name attribute.')
         if not self.url:
-            raise ValueError('A LinkAction object must have a '
-                             'url attribute.')
+            raise NotImplementedError('A LinkAction object must have a '
+                                      'url attribute.')
         if attrs:
             self.attrs.update(attrs)
 
-    def get_link_url(self, datum=None, *args, **kwargs):
+    def get_link_url(self, datum=None):
         """ Returns the final URL based on the value of ``url``.
 
         If ``url`` is callable it will call the function.
@@ -207,7 +223,7 @@ class LinkAction(BaseAction):
         passed as the first parameter.
         """
         if callable(self.url):
-            return self.url(datum, *args, **kwargs)
+            return self.url(datum, **self.kwargs)
         try:
             if datum:
                 obj_id = self.table.get_object_id(datum)
@@ -262,3 +278,146 @@ class FilterAction(BaseAction):
         """
         raise NotImplementedError("The filter method has not been implemented "
                                   "by %s." % self.__class__)
+
+
+class BatchAction(Action):
+    """ A table action which takes batch action on one or more
+        objects. This action should not require user input on a
+        per-object basis.
+
+    .. attribute:: name
+
+       An internal name for this action.
+
+    .. attribute:: action_present
+
+       The display form of the name. Should be a transitive verb,
+       capitalized and translated. ("Delete", "Rotate", etc.)
+
+    .. attribute:: action_past
+
+       The past tense of action_present. ("Deleted", "Rotated", etc.)
+
+    .. attribute:: data_type_singular
+
+       A display name for the type of data that receives the
+       action. ("Keypair", "Floating IP", etc.)
+
+    .. attribute:: data_type_plural
+
+       Optional plural word for the type of data being acted
+       on. Defaults to appending 's'. Relying on the default is bad
+       for translations and should not be done.
+
+    .. attribute:: success_url
+
+       Optional location to redirect after completion of the delete
+       action. Defaults to the current page.
+
+    .. method:: get_success_url(self, request=None)
+
+       Optional method that returns the success url.
+
+    .. method:: action(self, request, datum_id)
+
+       Required method that accepts the specified object information
+       and performs the action. Return values are discarded, errors
+       raised are caught and logged.
+
+    .. method:: allowed(self, request, datum)
+
+       Optional method that returns a boolean indicating whether the
+       action is allowed for the given input.
+    """
+    completion_url = None
+
+    def _conjugate(self, items=None, past=False):
+        """Builds combinations like 'Delete Object' and 'Deleted
+        Objects' based on the number of items and `past` flag.
+        """
+        if past:
+            action = self.action_past
+        else:
+            action = self.action_present
+        if items is None or len(items) == 1:
+            data_type = self.data_type_singular
+        else:
+            data_type = self.data_type_plural
+        return string_concat(action, ' ', data_type)
+
+    def __init__(self):
+        self.data_type_plural = getattr(self, 'data_type_plural',
+                                        self.data_type_singular + 's')
+        self.verbose_name = getattr(self, 'verbose_name',
+                                    self._conjugate())
+        self.verbose_name_plural = getattr(self, 'verbose_name_plural',
+                                           self._conjugate('plural'))
+        super(BatchAction, self).__init__()
+
+    def action(self, request, datum_id):
+        """ Override to take action on the specified datum. Return
+        values are ignored, errors raised are caught and logged.
+        """
+        raise NotImplementedError('action() must be defined for '
+                                  'BatchAction: %s' % self.data_type_singular)
+
+    def get_completion_url(self, request=None):
+        if self.completion_url:
+            return self.completion_url
+        return request.build_absolute_uri()
+
+    def handle(self, table, request, obj_ids):
+        tenant_id = request.user.tenant_id
+        action_success = []
+        action_failure = []
+        action_not_allowed = []
+        for datum_id in obj_ids:
+            datum = table.get_object_by_id(datum_id)
+            datum_display = table.get_object_display(datum)
+            if not table._filter_action(self, request, datum):
+                action_not_allowed.append(datum_display)
+                LOG.info('Permission denied to %s: "%s"' %
+                         (self._conjugate(past=True).lower(), datum_display))
+                continue
+            try:
+                self.action(request, datum_id)
+                action_success.append(datum_display)
+                LOG.info('%s: "%s"' %
+                         (self._conjugate(past=True), datum_display))
+            except:
+                action_str = self._conjugate().lower()
+                exceptions.handle(request,
+                                  _("Unable to %s.") % action_str)
+                action_failure.append(datum_display)
+
+        #Begin with success message class, downgrade to info if problems
+        success_message_level = messages.success
+        if action_not_allowed:
+            messages.error(request, _('You do not have permission to %s: %s') %
+                           (self._conjugate(action_not_allowed).lower(),
+                            ", ".join(action_not_allowed)))
+            success_message_level = messages.info
+        if action_failure:
+            messages.error(request, _('Unable to %s: %s') % (
+                    self._conjugate(action_failure).lower(),
+                    ", ".join(action_failure)))
+            success_message_level = messages.info
+        if action_success:
+            success_message_level(request, _('%s: %s') % (
+                    self._conjugate(action_success, True),
+                    ", ".join(action_success)))
+
+        return shortcuts.redirect(self.get_completion_url(request))
+
+
+class DeleteAction(BatchAction):
+    name = "delete"
+    action_present = _("Delete")
+    action_past = _("Deleted")
+    classes = ('danger',)
+
+    def action(self, request, obj_id):
+        return self.delete(request, obj_id)
+
+    def delete(self, request, obj_id):
+        raise NotImplementedError("DeleteAction must define a delete method.")

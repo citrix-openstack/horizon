@@ -28,7 +28,6 @@ import logging
 from django import http
 from django import shortcuts
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.utils.translation import ugettext as _
 from django.utils.datastructures import SortedDict
 from novaclient import exceptions as novaclient_exceptions
@@ -37,18 +36,20 @@ import openstackx.api.exceptions as api_exceptions
 from horizon import api
 from horizon import forms
 from horizon import test
-from horizon.dashboards.nova.instances_and_volumes.instances.forms import \
-                            (TerminateInstance, RebootInstance, UpdateInstance)
-from horizon.dashboards.nova.instances_and_volumes.volumes.forms import \
-                               (CreateForm, DeleteForm, AttachForm, DetachForm)
+from horizon.dashboards.nova.instances_and_volumes.instances.forms import (
+    TerminateInstance, PauseInstance, UnpauseInstance, SuspendInstance,
+    ResumeInstance, RebootInstance, UpdateInstance)
+from horizon.dashboards.nova.instances_and_volumes.volumes.forms import (
+CreateForm, DeleteForm, AttachForm, DetachForm)
 
 
 LOG = logging.getLogger(__name__)
 
 
-@login_required
 def index(request):
-    for f in (TerminateInstance, RebootInstance, DeleteForm, DetachForm):
+    for f in (TerminateInstance, PauseInstance, UnpauseInstance,
+              SuspendInstance, ResumeInstance, RebootInstance,
+              DeleteForm, DetachForm):
         form, handled = f.maybe_handle(request)
         if handled:
             return handled
@@ -86,6 +87,10 @@ def index(request):
         messages.error(request, _('Unable to get flavor info: %s') % e.message)
 
     terminate_form = TerminateInstance()
+    pause_form = PauseInstance()
+    unpause_form = UnpauseInstance()
+    suspend_form = SuspendInstance()
+    resume_form = ResumeInstance()
     reboot_form = RebootInstance()
     delete_form = DeleteForm()
     detach_form = DetachForm()
@@ -94,6 +99,10 @@ def index(request):
     return shortcuts.render(request, 'nova/instances_and_volumes/index.html', {
                                      'instances': instances,
                                      'terminate_form': terminate_form,
+                                     'pause_form': pause_form,
+                                     'unpause_form': unpause_form,
+                                     'suspend_form': suspend_form,
+                                     'resume_form': resume_form,
                                      'reboot_form': reboot_form,
                                      'volumes': volumes,
                                      'delete_form': delete_form,

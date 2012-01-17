@@ -24,6 +24,7 @@ from django import template
 from django.conf import settings
 from django.contrib import messages
 from django.core import urlresolvers
+from django.utils import http
 from django.utils.datastructures import SortedDict
 from django.utils.html import escape
 from django.utils.translation import ugettext as _
@@ -260,8 +261,9 @@ class Row(object):
         for column in table.columns.values():
             if column.auto == "multi_select":
                 widget = forms.CheckboxInput(check_test=False)
+                # Convert value to string to avoid accidental type conversion
                 data = widget.render('object_ids',
-                                     table.get_object_id(datum))
+                                     str(table.get_object_id(datum)))
                 column._data_cache[datum] = data
             elif column.auto == "actions":
                 data = table.render_row_actions(datum)
@@ -478,6 +480,9 @@ class DataTableOptions(object):
                                     'multi_select',
                                     len(self.table_actions) > 0)
 
+        # Set runtime table defaults; not configurable.
+        self.has_more_data = False
+
 
 class DataTableMetaclass(type):
     """ Metaclass to add options to DataTable class and collect columns. """
@@ -564,9 +569,10 @@ class DataTable(object):
     """
     __metaclass__ = DataTableMetaclass
 
-    def __init__(self, request, data):
+    def __init__(self, request, data, **kwargs):
         self._meta.request = request
         self._meta.data = data
+        self.kwargs = kwargs
 
         for column in self.columns.values():
             column.table = self
@@ -623,11 +629,15 @@ class DataTable(object):
         context = template.RequestContext(self._meta.request, extra_context)
         return table_template.render(context)
 
+    def get_empty_message(self):
+        """ Returns the message to be displayed when there is no data. """
+        return _("No items to display.")
+
     def get_object_by_id(self, lookup):
         """
         Returns the data object from the table's dataset which matches
         the ``lookup`` parameter specified. An error will be raised if
-        a the match is not a single data object.
+        the match is not a single data object.
 
         Uses :meth:`~horizon.tables.DataTable.get_object_id` internally.
         """
@@ -717,7 +727,11 @@ class DataTable(object):
         # See if we have a list of ids
         obj_ids = obj_ids or self._meta.request.POST.getlist('object_ids')
         action = self.base_actions.get(action_name, None)
-        if action and (obj_id or obj_ids):
+        if action and (not action.requires_input or obj_id or obj_ids):
+            if obj_id:
+                obj_id = self.sanitize_id(obj_id)
+            if obj_ids:
+                obj_ids = [self.sanitize_id(i) for i in obj_ids]
             # Single handling is easy
             if not action.handles_multiple:
                 response = action.single(self, self._meta.request, obj_id)
@@ -727,6 +741,9 @@ class DataTable(object):
                     obj_ids = [obj_id]
                 response = action.multiple(self, self._meta.request, obj_ids)
             return response
+        elif action and action.requires_input and not (obj_id or obj_ids):
+            messages.info(self._meta.request,
+                          _("Please select a row before taking that action."))
         return None
 
     def maybe_handle(self):
@@ -740,6 +757,12 @@ class DataTable(object):
                     return self.take_action(action, obj_id)
         return None
 
+    def sanitize_id(self, obj_id):
+        """ Override to modify an incoming obj_id to match existing
+        API data types or modify the format.
+        """
+        return obj_id
+
     def get_object_id(self, datum):
         """ Returns the identifier for the object this row will represent.
 
@@ -747,6 +770,31 @@ class DataTable(object):
         but this can be overridden to return other values.
         """
         return datum.id
+
+    def get_object_display(self, datum):
+        """ Returns a display name that identifies this object.
+
+        By default, this returns a ``name`` attribute from the given object,
+        but this can be overriden to return other values.
+        """
+        return datum.name
+
+    def has_more_data(self):
+        """
+        Returns a boolean value indicating whether there is more data
+        available to this table from the source (generally an API).
+
+        The method is largely meant for internal use, but if you want to
+        override it to provide custom behavior you can do so at your own risk.
+        """
+        return self._meta.has_more_data
+
+    def get_marker(self):
+        """
+        Returns the identifier for the last object in the current data set
+        for APIs that use marker/limit-based paging.
+        """
+        return http.urlquote_plus(self.get_object_id(self.data[-1]))
 
     def get_columns(self):
         """ Returns this table's columns including auto-generated ones."""

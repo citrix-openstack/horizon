@@ -27,7 +27,6 @@ import logging
 from django import http
 from django import shortcuts
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.utils.datastructures import SortedDict
 from django.utils.translation import ugettext as _
 import openstackx.api.exceptions as api_exceptions
@@ -36,14 +35,14 @@ import horizon
 from horizon import api
 from horizon import forms
 from horizon import test
-from horizon.dashboards.nova.instances_and_volumes.instances.forms import \
-                            (TerminateInstance, RebootInstance, UpdateInstance)
+from horizon.dashboards.nova.instances_and_volumes.instances.forms import (
+    TerminateInstance, PauseInstance, UnpauseInstance, SuspendInstance,
+    ResumeInstance, RebootInstance, UpdateInstance)
 
 
 LOG = logging.getLogger(__name__)
 
 
-@login_required
 def index(request):
     tenant_id = request.user.tenant_id
     for f in (TerminateInstance, RebootInstance):
@@ -79,16 +78,23 @@ def index(request):
     # We don't have any way of showing errors for these, so don't bother
     # trying to reuse the forms from above
     terminate_form = TerminateInstance()
+    pause_form = PauseInstance()
+    unpause_form = UnpauseInstance()
+    suspend_form = SuspendInstance()
+    resume_form = ResumeInstance()
     reboot_form = RebootInstance()
 
     return shortcuts.render(request,
                         'nova/instances_and_volumes/instances/index.html', {
                             'instances': instances,
                             'terminate_form': terminate_form,
+                            'pause_form': pause_form,
+                            'unpause_form': unpause_form,
+                            'suspend_form': suspend_form,
+                            'resume_form': resume_form,
                             'reboot_form': reboot_form})
 
 
-@login_required
 def refresh(request):
     tenant_id = request.user.tenant_id
     instances = []
@@ -103,16 +109,23 @@ def refresh(request):
     # We don't have any way of showing errors for these, so don't bother
     # trying to reuse the forms from above
     terminate_form = TerminateInstance()
+    pause_form = PauseInstance()
+    unpause_form = UnpauseInstance()
+    suspend_form = SuspendInstance()
+    resume_form = ResumeInstance()
     reboot_form = RebootInstance()
 
     return shortcuts.render(request,
                         'nova/instances_and_volumes/instances/_list.html', {
                             'instances': instances,
                             'terminate_form': terminate_form,
+                            'pause_form': pause_form,
+                            'unpause_form': unpause_form,
+                            'suspend_form': suspend_form,
+                            'resume_form': resume_form,
                             'reboot_form': reboot_form})
 
 
-@login_required
 def usage(request, tenant_id=None):
     tenant_id = tenant_id or request.user.tenant_id
     today = test.today()
@@ -180,19 +193,16 @@ def usage(request, tenant_id=None):
                             content_type=mimetype)
 
 
-@login_required
 def console(request, instance_id):
     tenant_id = request.user.tenant_id
     try:
         # TODO(jakedahn): clean this up once the api supports tailing.
-        length = request.GET.get('length', '')
-        console = api.console_create(request, instance_id, 'text')
+        length = request.GET.get('length', None)
+        console = api.server_console_output(request,
+                                            instance_id,
+                                            tail_length=length)
         response = http.HttpResponse(mimetype='text/plain')
-        if length:
-            response.write('\n'.join(console.output.split('\n')
-                           [-int(length):]))
-        else:
-            response.write(console.output)
+        response.write(console)
         response.flush()
         return response
     except api_exceptions.ApiException, e:
@@ -204,7 +214,6 @@ def console(request, instance_id):
                           'horizon:nova:instances_and_volumes:instances:index')
 
 
-@login_required
 def vnc(request, instance_id):
     tenant_id = request.user.tenant_id
     try:
@@ -221,7 +230,6 @@ def vnc(request, instance_id):
                           'horizon:nova:instances_and_volumes:instances:index')
 
 
-@login_required
 def update(request, instance_id):
     tenant_id = request.user.tenant_id
     try:
@@ -248,7 +256,6 @@ def update(request, instance_id):
                             'form': form})
 
 
-@login_required
 def detail(request, instance_id):
     tenant_id = request.user.tenant_id
     try:

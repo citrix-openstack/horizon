@@ -115,7 +115,8 @@ function run_pep8 {
   echo "Running pep8 ..."
   rm -f pep8.txt
   PEP8_EXCLUDE=vcsversion.py
-  PEP8_OPTIONS="--exclude=$PEP8_EXCLUDE --repeat"
+  PEP8_IGNORE=W602
+  PEP8_OPTIONS="--exclude=$PEP8_EXCLUDE --ignore=$PEP8_IGNORE --repeat"
   ${command_wrapper} pep8 $PEP8_OPTIONS $included_dirs | perl -ple 's/: ([WE]\d+)/: [$1]/' > pep8.txt || true
   PEP8_COUNT=`wc -l pep8.txt | awk '{ print $1 }'`
   if [ $PEP8_COUNT -ge 1 ]; then
@@ -267,29 +268,18 @@ function run_tests {
 
   echo "Running Horizon application tests"
   ${command_wrapper} coverage erase
-  ${command_wrapper} coverage run $root/openstack-dashboard/manage.py test horizon --settings=horizon.tests.testsettings
+  ${command_wrapper} coverage run $root/openstack-dashboard/manage.py test horizon --settings=horizon.tests.testsettings $testargs
   # get results of the Horizon tests
   HORIZON_RESULT=$?
 
   echo "Running openstack-dashboard (Django project) tests"
-  if [ -f $root/openstack-dashboard/local/local_settings.py ]; then
-    cp $root/openstack-dashboard/local/local_settings.py $root/openstack-dashboard/local/local_settings.py.bak
-  fi
-  cp $root/openstack-dashboard/local/local_settings.py.example $root/openstack-dashboard/local/local_settings.py
-
   if [ $selenium -eq 1 ]; then
-      ${command_wrapper} coverage run $root/openstack-dashboard/manage.py test dashboard --with-selenium --with-cherrypyliveserver
+      ${command_wrapper} coverage run $root/openstack-dashboard/manage.py test dashboard --settings=horizon.tests.testsettings --with-selenium --with-cherrypyliveserver $testargs
     else
-      ${command_wrapper} coverage run $root/openstack-dashboard/manage.py test dashboard
+      ${command_wrapper} coverage run $root/openstack-dashboard/manage.py test dashboard --settings=horizon.tests.testsettings $testargs
   fi
   # get results of the openstack-dashboard tests
   DASHBOARD_RESULT=$?
-
-  if [ -f $root/openstack-dashboard/local/local_settings.py.bak ]; then
-    cp $root/openstack-dashboard/local/local_settings.py.bak $root/openstack-dashboard/local/local_settings.py
-    rm $root/openstack-dashboard/local/local_settings.py.bak
-  fi
-  rm -f $root/openstack-dashboard/local/local_settings.pyc
 
   if [ $with_coverage -eq 1 ]; then
     echo "Generating coverage reports"

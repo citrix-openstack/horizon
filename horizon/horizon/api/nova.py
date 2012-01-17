@@ -5,6 +5,7 @@
 # All Rights Reserved.
 #
 # Copyright 2011 Nebula, Inc.
+# Copyright (c) 2011 X.commerce, a business unit of eBay Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -45,8 +46,13 @@ class Flavor(APIResourceWrapper):
 
 
 class FloatingIp(APIResourceWrapper):
+    """Simple wrapper for floating ip pools"""
+    _attrs = ['ip', 'fixed_ip', 'instance_id', 'id', 'pool']
+
+
+class FloatingIpPool(APIResourceWrapper):
     """Simple wrapper for floating ips"""
-    _attrs = ['ip', 'fixed_ip', 'instance_id', 'id']
+    _attrs = ['name']
 
 
 class KeyPair(APIResourceWrapper):
@@ -132,16 +138,9 @@ class SecurityGroup(APIResourceWrapper):
     _attrs = ['id', 'name', 'description', 'tenant_id', 'rules']
 
 
-class SecurityGroupRule(APIResourceWrapper):
-    """Simple wrapper around
-    openstackx.extras.security_groups.SecurityGroupRule"""
-    _attrs = ['id', 'parent_group_id', 'group_id', 'ip_protocol',
-              'from_port', 'to_port', 'groups', 'ip_ranges']
-
-
-class SecurityGroupRule(APIResourceWrapper):
-    """Simple wrapper around openstackx.extras.users.User"""
-    _attrs = ['id', 'name', 'description', 'tenant_id', 'security_group_rules']
+class SecurityGroupRule(APIDictWrapper):
+    """ Simple wrapper for individual rules in a SecurityGroup. """
+    _attrs = ['ip_protocol', 'from_port', 'to_port', 'ip_range']
 
 
 def novaclient(request):
@@ -186,6 +185,13 @@ def tenant_floating_ip_list(request):
     return [FloatingIp(ip) for ip in novaclient(request).floating_ips.list()]
 
 
+def floating_ip_pools_list(request):
+    """
+    Fetches a list of all floating ip pools.
+    """
+    return [FloatingIpPool(pool)
+            for pool in novaclient(request).floating_ip_pools.list()]
+
 def tenant_floating_ip_get(request, floating_ip_id):
     """
     Fetches a floating ip.
@@ -193,11 +199,12 @@ def tenant_floating_ip_get(request, floating_ip_id):
     return novaclient(request).floating_ips.get(floating_ip_id)
 
 
-def tenant_floating_ip_allocate(request):
+def tenant_floating_ip_allocate(request, pool=None):
     """
     Allocates a floating ip to tenant.
+    Optionally you may provide a pool for which you would like the IP.
     """
-    return novaclient(request).floating_ips.create()
+    return novaclient(request).floating_ips.create(pool=pool)
 
 
 def tenant_floating_ip_release(request, floating_ip_id):
@@ -247,9 +254,31 @@ def server_list(request):
     return [Server(s, request) for s in novaclient(request).servers.list()]
 
 
+def server_console_output(request, instance_id, tail_length=None):
+    """Gets console output of an instance"""
+    return novaclient(request).servers.get_console_output(instance_id,
+                                                          length=tail_length)
+
+
 @check_openstackx
 def admin_server_list(request):
     return [Server(s, request) for s in admin_api(request).servers.list()]
+
+
+def server_pause(request, instance_id):
+    novaclient(request).servers.pause(instance_id)
+
+
+def server_unpause(request, instance_id):
+    novaclient(request).servers.unpause(instance_id)
+
+
+def server_suspend(request, instance_id):
+    novaclient(request).servers.suspend(instance_id)
+
+
+def server_resume(request, instance_id):
+    novaclient(request).servers.resume(instance_id)
 
 
 def server_reboot(request,

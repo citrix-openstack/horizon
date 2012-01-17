@@ -5,6 +5,7 @@
 # All Rights Reserved.
 #
 # Copyright 2011 Nebula, Inc.
+# Copyright (c) 2011 X.commerce, a business unit of eBay Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -22,7 +23,7 @@ from __future__ import absolute_import
 
 from django import http
 from django.conf import settings
-from mox import IsA
+from mox import IsA, IgnoreArg
 from openstackx import admin as OSAdmin
 from openstackx import auth as OSAuth
 from openstackx import extras as OSExtras
@@ -199,6 +200,60 @@ class ComputeApiTests(APITestCase):
         self.mox.ReplayAll()
 
         ret_val = api.server_delete(self.request, INSTANCE)
+
+        self.assertIsNone(ret_val)
+
+    def test_server_pause(self):
+        INSTANCE = 'anInstance'
+
+        novaclient = self.stub_novaclient()
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.pause(INSTANCE).AndReturn(TEST_RETURN)
+
+        self.mox.ReplayAll()
+
+        server = self.mox.CreateMock(servers.Server)
+
+        ret_val = api.server_pause(self.request, INSTANCE)
+
+        self.assertIsNone(ret_val)
+
+    def test_server_unpause(self):
+        INSTANCE = 'anInstance'
+
+        novaclient = self.stub_novaclient()
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.unpause(INSTANCE).AndReturn(TEST_RETURN)
+
+        self.mox.ReplayAll()
+
+        ret_val = api.server_unpause(self.request, INSTANCE)
+
+        self.assertIsNone(ret_val)
+
+    def test_server_suspend(self):
+        INSTANCE = 'anInstance'
+
+        novaclient = self.stub_novaclient()
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.suspend(INSTANCE).AndReturn(TEST_RETURN)
+
+        self.mox.ReplayAll()
+
+        ret_val = api.server_suspend(self.request, INSTANCE)
+
+        self.assertIsNone(ret_val)
+
+    def test_server_resume(self):
+        INSTANCE = 'anInstance'
+
+        novaclient = self.stub_novaclient()
+        novaclient.servers = self.mox.CreateMockAnything()
+        novaclient.servers.resume(INSTANCE).AndReturn(TEST_RETURN)
+
+        self.mox.ReplayAll()
+
+        ret_val = api.server_resume(self.request, INSTANCE)
 
         self.assertIsNone(ret_val)
 
@@ -423,14 +478,27 @@ class APIExtensionTests(APITestCase):
 
         self.assertIsInstance(floating_ip, api.FloatingIp)
 
-    def test_tenant_floating_ip_allocate(self):
+    def test_tenant_floating_ip_allocate_without_pool(self):
         novaclient = self.stub_novaclient()
 
         novaclient.floating_ips = self.mox.CreateMockAnything()
-        novaclient.floating_ips.create().AndReturn(self.floating_ip)
+        novaclient.floating_ips.create(pool=IgnoreArg()).\
+                                                    AndReturn(self.floating_ip)
         self.mox.ReplayAll()
 
         floating_ip = api.tenant_floating_ip_allocate(self.request)
+
+        self.assertIsInstance(floating_ip, api.FloatingIp)
+
+    def test_tenant_floating_ip_allocate_with_pool(self):
+        novaclient = self.stub_novaclient()
+
+        novaclient.floating_ips = self.mox.CreateMockAnything()
+        novaclient.floating_ips.create(pool="nova").AndReturn(self.floating_ip)
+        self.mox.ReplayAll()
+
+        floating_ip = api.tenant_floating_ip_allocate(self.request,
+                                                      pool='nova')
 
         self.assertIsInstance(floating_ip, api.FloatingIp)
 

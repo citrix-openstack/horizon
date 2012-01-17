@@ -61,3 +61,19 @@ Actions
 
 .. autoclass:: FilterAction
     :members:
+
+.. autoclass:: BatchAction
+    :members:
+
+.. autoclass:: DeleteAction
+    :members:
+
+Class-Based Views
+=================
+
+Several class-based views are provided to make working with DataTables
+easier in your UI.
+
+.. autoclass:: DataTableView
+
+.. autoclass:: MultiTableView

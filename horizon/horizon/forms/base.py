@@ -96,7 +96,7 @@ class SelectDateWidget(widgets.Widget):
                 self.month_field, value, month_val, choices)
         choices = [(i, i) for i in range(1, 32)]
         day_html = self.create_select(name,
-                self.day_field, value, day_val,  choices)
+                self.day_field, value, day_val, choices)
 
         format = formats.get_format('DATE_FORMAT')
         escaped = False
@@ -209,14 +209,8 @@ class SelfHandlingForm(Form):
 
         try:
             return form, form.handle(request, data)
-        except Exception as e:
-            LOG.exception('Error while handling form "%s".' % cls.__name__)
-            if issubclass(e.__class__, exceptions.NotAuthorized):
-                # Let the middleware handle it as intended.
-                raise
-            if not hasattr(e, 'message'):
-                e.message = str(e)
-            messages.error(request, _('%s') % e.message)
+        except:
+            exceptions.handle(request)
             return form, None
 
 

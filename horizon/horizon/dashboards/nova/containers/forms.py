@@ -20,7 +20,6 @@
 
 import logging
 
-from cloudfiles.errors import ContainerNotEmpty
 from django import shortcuts
 from django.contrib import messages
 from django.utils.translation import ugettext as _
@@ -32,25 +31,6 @@ from horizon import forms
 LOG = logging.getLogger(__name__)
 
 
-class DeleteContainer(forms.SelfHandlingForm):
-    container_name = forms.CharField(widget=forms.HiddenInput())
-
-    def handle(self, request, data):
-        try:
-            api.swift_delete_container(request, data['container_name'])
-        except ContainerNotEmpty, e:
-            messages.error(request,
-                           _('Unable to delete non-empty container: %s') %
-                           data['container_name'])
-            LOG.exception('Unable to delete container "%s".  Exception: "%s"' %
-                      (data['container_name'], str(e)))
-        else:
-            messages.info(request,
-                      _('Successfully deleted container: %s') % \
-                      data['container_name'])
-        return shortcuts.redirect(request.build_absolute_uri())
-
-
 class CreateContainer(forms.SelfHandlingForm):
     name = forms.CharField(max_length="255", label=_("Container Name"))
 
@@ -60,52 +40,19 @@ class CreateContainer(forms.SelfHandlingForm):
         return shortcuts.redirect("horizon:nova:containers:index")
 
 
-class FilterObjects(forms.SelfHandlingForm):
-    container_name = forms.CharField(widget=forms.HiddenInput())
-    object_prefix = forms.CharField(required=False)
-
-    def handle(self, request, data):
-        object_prefix = data['object_prefix'] or None
-
-        objects, more = api.swift_get_objects(request,
-                                              data['container_name'],
-                                              prefix=object_prefix)
-
-        if not objects:
-            messages.info(request,
-                         _('There are no objects matching that prefix in %s') %
-                         data['container_name'])
-
-        return (objects, more)
-
-
-class DeleteObject(forms.SelfHandlingForm):
-    object_name = forms.CharField(widget=forms.HiddenInput())
-    container_name = forms.CharField(widget=forms.HiddenInput())
-
-    def handle(self, request, data):
-        api.swift_delete_object(
-                request,
-                data['container_name'],
-                data['object_name'])
-        messages.info(request,
-                      _('Successfully deleted object: %s') %
-                      data['object_name'])
-        return shortcuts.redirect(request.build_absolute_uri())
-
-
 class UploadObject(forms.SelfHandlingForm):
     name = forms.CharField(max_length="255", label=_("Object Name"))
     object_file = forms.FileField(label=_("File"))
     container_name = forms.CharField(widget=forms.HiddenInput())
 
     def handle(self, request, data):
-        api.swift_upload_object(
-                request,
-                data['container_name'],
-                data['name'],
-                self.files['object_file'].read())
-
+        object_file = self.files['object_file']
+        obj = api.swift_upload_object(request,
+                                      data['container_name'],
+                                      data['name'],
+                                      object_file.read())
+        obj.metadata['orig-filename'] = object_file.name
+        obj.sync_metadata()
         messages.success(request, _("Object was successfully uploaded."))
         return shortcuts.redirect("horizon:nova:containers:object_index",
                                   data['container_name'])
