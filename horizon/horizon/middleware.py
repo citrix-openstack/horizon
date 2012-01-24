@@ -23,8 +23,9 @@ Middleware provided and used by Horizon.
 
 import logging
 
-from django.contrib import messages
 from django import shortcuts
+from django.contrib import messages
+from django.utils.translation import ugettext as _
 
 from horizon import api
 from horizon import exceptions
@@ -68,4 +69,6 @@ class HorizonMiddleware(object):
             return shortcuts.redirect('/auth/login')
 
         if isinstance(exception, exceptions.Http302):
+            if exception.message:
+                messages.error(request, exception.message)
             return shortcuts.redirect(exception.location)

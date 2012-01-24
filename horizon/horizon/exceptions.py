@@ -22,6 +22,9 @@ import logging
 import sys
 
 from django.contrib import messages
+from django.utils.translation import ugettext as _
+from cloudfiles import errors as swiftclient
+from glance.common import exception as glanceclient
 from keystoneclient import exceptions as keystoneclient
 from novaclient import exceptions as novaclient
 from openstackx.api import exceptions as openstackx
@@ -35,16 +38,25 @@ UNAUTHORIZED = (openstackx.Unauthorized,
                 keystoneclient.Unauthorized,
                 keystoneclient.Forbidden,
                 novaclient.Unauthorized,
-                novaclient.Forbidden)
+                novaclient.Forbidden,
+                glanceclient.AuthorizationFailure,
+                glanceclient.NotAuthorized,
+                swiftclient.AuthenticationFailed,
+                swiftclient.AuthenticationError)
 
 NOT_FOUND = (keystoneclient.NotFound,
              novaclient.NotFound,
-             openstackx.NotFound)
+             openstackx.NotFound,
+             glanceclient.NotFound,
+             swiftclient.NoSuchContainer,
+             swiftclient.NoSuchObject)
 
 # NOTE(gabriel): This is very broad, and may need to be dialed in.
 RECOVERABLE = (keystoneclient.ClientException,
                novaclient.ClientException,
-               openstackx.ApiException)
+               openstackx.ApiException,
+               glanceclient.GlanceException,
+               swiftclient.Error)
 
 
 class Http302(Exception):
@@ -52,8 +64,9 @@ class Http302(Exception):
     Error class which can be raised from within a handler to cause an
     early bailout and redirect at the middleware level.
     """
-    def __init__(self, location):
+    def __init__(self, location, message=None):
         self.location = location
+        self.message = message
 
 
 class NotAuthorized(Exception):
@@ -124,6 +137,10 @@ def handle(request, message=None, redirect=None, ignore=False, escalate=False):
     if handled:
         exc_type, exc_value, exc_traceback = exc_value.wrapped
         wrap = True
+
+    # If the message has a placeholder for the exception, fill it in
+    if message and "%(exc)s" in message:
+        message = message % {"exc": exc_value}
 
     if issubclass(exc_type, UNAUTHORIZED):
         if ignore:

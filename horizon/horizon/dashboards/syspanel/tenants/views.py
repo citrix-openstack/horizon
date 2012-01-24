@@ -79,8 +79,8 @@ class UpdateView(forms.ModalFormView):
             return api.tenant_get(self.request, tenant_id)
         except Exception as e:
             LOG.exception('Error fetching tenant with id "%s"' % tenant_id)
-            messages.error(request, _('Unable to update tenant: %s')
-                                      % e.message)
+            messages.error(self.request, _('Unable to update tenant: %s')
+                                           % e.message)
             raise http.Http404("Tenant with ID %s not found." % tenant_id)
 
     def get_initial(self):
@@ -121,10 +121,10 @@ class QuotasView(forms.ModalFormView):
         return api.keystone.tenant_get(self.request, kwargs["tenant_id"])
 
     def get_initial(self):
-        quotas = api.keystone.tenant_quota_get(self.request,
+        quotas = api.nova.tenant_quota_get(self.request,
                                                self.kwargs['tenant_id'])
         return {
-            'tenant_id': quotas.id,
+            'tenant_id': self.kwargs['tenant_id'],
             'metadata_items': quotas.metadata_items,
             'injected_file_content_bytes': quotas.injected_file_content_bytes,
             'volumes': quotas.volumes,

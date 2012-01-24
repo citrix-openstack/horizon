@@ -24,7 +24,6 @@ Context processors used by Horizon.
 import logging
 
 from django.conf import settings
-from django.contrib import messages
 
 from horizon import api
 
@@ -74,5 +73,12 @@ def horizon(request):
     # TODO(gabriel): Convert to service catalog check when Quantum starts
     #                supporting keystone integration.
     context['network_configured'] = getattr(settings, 'QUANTUM_ENABLED', None)
+
+    # Region context/support
+    available_regions = getattr(settings, 'AVAILABLE_REGIONS', None)
+    regions = {'support': available_regions > 1,
+               'endpoint': request.session.get('region_endpoint'),
+               'name': request.session.get('region_name')}
+    context['region'] = regions
 
     return context
